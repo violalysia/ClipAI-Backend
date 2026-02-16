@@ -286,13 +286,16 @@ app.post('/api/ai/caption', authMiddleware, async (req, res) => {
 });
 
 // ==================== START SERVER ====================
-app.listen(PORT, () => {
-  console.log(`
+// Only listen locally, for Vercel export the app
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`
   ╔═══════════════════════════════╗
   ║   🤖 ClipAI Server Running   ║
   ║   http://localhost:${PORT}      ║
   ╚═══════════════════════════════╝
   `);
-});
+  });
+}
 
 module.exports = app;

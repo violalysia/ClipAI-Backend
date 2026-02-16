@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "ClipAI-Backend-server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "ClipAI-Backend-server.js"
+    }
+  ],
+  "env": {
+    "PORT": "3001",
+    "JWT_SECRET": "@jwt_secret",
+    "FRONTEND_URL": "@frontend_url",
+    "NODE_ENV": "production"
+  }
+}
