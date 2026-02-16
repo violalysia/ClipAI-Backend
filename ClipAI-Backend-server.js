@@ -24,8 +24,32 @@ const JWT_SECRET = process.env.JWT_SECRET || 'clipai-super-secret-key-2025';
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static('uploads'));
+
+// Static files - use /tmp for Vercel production
+const uploadsDir = process.env.NODE_ENV === 'production' ? '/tmp/uploads' : 'uploads';
+app.use('/uploads', express.static(uploadsDir));
 app.use(express.static(path.join(__dirname, '../')));
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', message: 'ClipAI Backend is running!', env: process.env.NODE_ENV });
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: '🤖 ClipAI Backend Server', 
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      auth: '/api/auth',
+      videos: '/api/videos',
+      clips: '/api/clips',
+      schedule: '/api/schedule',
+      analytics: '/api/analytics'
+    }
+  });
+});
 
 // Rate limiter (sederhana)
 const rateLimitMap = new Map();
@@ -44,9 +68,15 @@ const rateLimit = (max, windowMs) => (req, res, next) => {
 };
 
 // ==================== DATABASE ====================
-const db = new sqlite3.Database('./clipai.db', (err) => {
-  if (err) console.error('DB Error:', err);
-  else console.log('✅ Database terhubung');
+// Use /tmp for Vercel serverless, or local for development
+const dbPath = process.env.NODE_ENV === 'production' ? '/tmp/clipai.db' : './clipai.db';
+
+const db = new sqlite3.Database(dbPath, (err) => {
+  if (err) {
+    console.error('❌ DB Error:', err);
+  } else {
+    console.log('✅ Database terhubung di:', dbPath);
+  }
 });
 
 db.serialize(() => {
@@ -126,15 +156,17 @@ const authMiddleware = (req, res, next) => {
   try {
     req.user = jwt.verify(token, JWT_SECRET);
     next();
-  } catch {
-    res.status(401).json({ error: 'Token tidak valid' });
+  } catch (err) {
+    console.error('Token verification error:', err.message);
+    res.status(401).json({ error: 'Token tidak valid atau expired' });
   }
 };
 
 // ==================== FILE UPLOAD ====================
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = `uploads/user_${req.user?.id || 'temp'}`;
+    const baseDir = process.env.NODE_ENV === 'production' ? '/tmp' : '.';
+    const dir = `${baseDir}/uploads/user_${req.user?.id || 'temp'}`;
     fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
@@ -283,6 +315,26 @@ app.post('/api/ai/caption', authMiddleware, async (req, res) => {
     `Tunggu sampai detik terakhir... 😱 Ini mengubah segalanya. #trending #indonesia`
   ];
   res.json({ caption: captions[Math.floor(Math.random() * captions.length)] });
+});
+
+// ==================== ERROR HANDLERS ====================
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ 
+    error: 'Endpoint not found', 
+    path: req.path,
+    method: req.method,
+    hint: 'Check /health or / for available endpoints'
+  });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('❌ Error:', err);
+  res.status(err.status || 500).json({ 
+    error: err.message || 'Internal server error',
+    stack: process.env.NODE_ENV === 'production' ? undefined : err.stack
+  });
 });
 
 // ==================== START SERVER ====================
